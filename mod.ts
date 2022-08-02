@@ -96,7 +96,7 @@ export function useStore<T>(state: T, onChange: (state: T) => void, pointer?: st
     StoreStack.configure();
 
     if (typeof pointer === "string") {
-        window.stores.addStoreAtPointer(store, pointer);
+        window.stores.addStoreAtPointer(store, pointer, true);
         return pointer;
     } else {
         return window.stores.addStore(store);
@@ -127,8 +127,8 @@ export class StoreStack {
         return ptr;
     }
 
-    public addStoreAtPointer(newItem: AnyStore, pointer: string): void {
-        if (typeof this.stores[pointer] !== "undefined") {
+    public addStoreAtPointer(newItem: AnyStore, pointer: string, override?: boolean): void {
+        if (typeof this.stores[pointer] !== "undefined" && !override) {
             return console.error('Error: Cannot add store at pointer, address is already allocated.');
         }
 
