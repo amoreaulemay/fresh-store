@@ -105,18 +105,18 @@ interface CompBProps {
     storePtr: string;
 }
 
-class CounterObserver implements Observer<number> {
-    public update(subject: Store<number>) {
-        setCounter(subject.state);
-    }
-}
-
-const observer = new CounterObserver();
-
 export default function ComponentB(props: CompBProps) {
     const [counter, setCounter] = useState(0);
 
     useEffect(() => {
+        class CounterObserver implements Observer<number> {
+            public update(subject: Store<number>) {
+                setCounter(subject.state);
+            }
+        }
+
+        const observer = new CounterObserver();
+
         StoreStack.configure();
         window.stores.upsert<number>(counter, props.storePtr, observer);
 
