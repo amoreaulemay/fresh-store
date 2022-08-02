@@ -117,9 +117,16 @@ export default function ComponentB(props: CompBProps) {
 
         const observer = new CounterObserver();
 
+        // Makes sure `window.stores` is defined.
         StoreStack.configure();
+
+        // Creates the store if it does not yet exist.
         window.stores.upsert<number>(counter, props.storePtr, observer);
 
+        // Sets the counter value to the value in the store.
+        setCounter(window.stores.get<number>(props.storePtr)!.state);
+
+        // Detaches the observer on cleanup.
         return () => window.stores.get(props.storePtr).detach(observer);
     }, [counter]);
 

@@ -138,10 +138,10 @@ export class StoreStack {
     public upsert<T>(defaultValue: T, pointer: string, ...observers: Observer<T>[]): void {
         if (typeof this.stores[pointer] === "undefined") {
             this.stores[pointer] = new Store(defaultValue);
+        }
 
-            for (const observer of observers) {
-                this.stores[pointer].attach(observer);
-            }
+        for (const observer of observers) {
+            this.stores[pointer].attach(observer);
         }
     }
 
