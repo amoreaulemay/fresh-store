@@ -1,10 +1,6 @@
 /// <reference path="./global.d.ts" />
 
-let clone = structuredClone;
-
-if ('clone' in window === false) {
-    clone = (await import('https://esm.sh/lodash-es@4.17.21')).cloneDeep;
-}
+import 'https://deno.land/x/corejs@v3.24.1/index.js';
 
 export interface Observer<T> {
     update(subject: Store<T>): void;
@@ -49,9 +45,9 @@ export class Store<T> implements Subject<T> {
 
     public set(options: T | ((prevState: T) => T)): void {
         if (typeof options === "function") {
-            this.state = (options as (prevState: T) => T)(clone(this.state) as T);
+            this.state = (options as (prevState: T) => T)(structuredClone(this.state) as T);
         } else {
-            this.state = clone(options) as T;
+            this.state = structuredClone(options) as T;
         }
 
         this.notify();
