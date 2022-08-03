@@ -59,7 +59,7 @@ export type Pointer = string;
 /**
  * The options to create a store.
  */
-interface StoreOptions<T> {
+export interface StoreOptions<T> {
     /**
      * A key or "pointer" to the store location in `window.stores`.
      * 
