@@ -96,7 +96,7 @@ export function useStore<T>(state: T, onChange: (state: T) => void, pointer?: st
     StoreStack.configure();
 
     if (typeof pointer === "string") {
-        window.stores.addStoreAtPointer(store, pointer, true);
+        window.stores.addStoreAtPointer(store, pointer);
         return pointer;
     } else {
         return window.stores.addStore(store);
