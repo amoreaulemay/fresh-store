@@ -54,63 +54,115 @@ export class Store<T> implements Subject<T> {
     }
 }
 
+export type Pointer = string;
+
 /**
- * Create a store and insert it into `window.stores` object. Returns the index pointing to its location.
- * 
- * @example
- * ```
- * // Let the store create its own pointer
- * const ptr = useStore("Test", (state) => console.log(`I was changed to ${state}`));
- * 
- * // Changing the value
- * window.stores.get<string>(ptr).set("New Value"); // Will notify observers. Output to console: "I was changed to New Value".
- * 
- * // Creating a store with a given pointer
- * const pointer = crypto.randomUUID();
- * useStore("Test with pointer", (state) => console.log(`New state: ${state}`), pointer);
- * 
- * window.stores.get<string>(pointer).set("New Value 2"); // Will notify observers. Ouput to console: "New state: New Value 2".
- * ```
- * 
- * @param state The initial state value.
- * @param onChange A "free" callback to be executed on state change.
- * @param pointer An optionnal pre-defined pointer. If provided, it will use that pointer.
- * @param observers Additional observers to be attached to the store.
- * @returns A pointer to the store in `window.stores`.
+ * The options to create a store.
  */
-export function useStore<T>(state: T, onChange: (state: T) => void, pointer?: string, ...observers: Observer<T>[]): string {
-    const store = new Store(state);
+interface StoreOptions<T> {
+    /**
+     * A key or "pointer" to the store location in `window.stores`.
+     * 
+     * @remarks
+     * If no pointer is provided, it will be automatically generated and the function will return the pointer as a `string`.
+     * 
+     * @optional
+     */
+    pointer?: Pointer;
 
-    class StoreObserver implements Observer<T> {
-        public update(subject: Store<T>): void {
-            onChange(subject.state);
+    /**
+     * A "free" observer already configured. Will execute the callback when the state change.
+     * 
+     * @optional
+     */
+    onChange?: (state: T) => void;
+
+    /**
+     * Additional observers that need to be attached to the store.
+     * 
+     * @optional
+     */
+    observers?: Observer<T>[];
+
+    /**
+     * If set to true, will override the store at the pointer's address if it exists.
+     * 
+     * @remark
+     * Has no effect if the address is unallocated.
+     * 
+     * @default false
+     * 
+     * @optional
+     */
+    override?: boolean;
+}
+
+/**
+ * Convenience function to create a store. Multiple options can be provided, see {@link StoreOptions}.
+ * 
+ * Unless the `override` option is set to `true`, this function will not override an existing store, it
+ * is therefor safe to use to make sure a store is defined in multiple components.
+ * 
+ * ### Example
+ * 
+ * ```typescript
+ * // 1. Creating a store without any options
+ * const store1Ptr = useStore(0);
+ * console.log(Stores.get<number>(store1Ptr).state); // Output: 0
+ * 
+ * // 2. Creating a store with options
+ * const store2Ptr = crypto.randomUUID();
+ * useStore(0, { pointer: store2Ptr, onChange: (state) => console.log(state), });
+ * 
+ * console.log(Stores.get<number>(store2Ptr).state); // Ouput: 0
+ * Stores.get<number>(store2Ptr).set((prevState) => prevState + 1); // Ouput: 1
+ * ```
+ * 
+ * @remarks
+ * If no pointer is provided, a pointer will be assigned and returned.
+ * 
+ * @param state The initial state. If the store already exists, it will not overwrite the state unless the `override` option is set to `true`.
+ * @param options See {@link StoreOptions}.
+ * @returns The {@link Pointer} to the location of the store.
+ */
+export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
+    if (typeof options === "object") {
+        const pointer = options.pointer ?? crypto.randomUUID();
+        const callback = options.onChange ?? (() => null);
+        const observers = options.observers ?? [];
+        const override = options.override ?? false;
+
+        class StoreObserver implements Observer<T> {
+            public update(subject: Store<T>): void {
+                callback(subject.state);
+            }
         }
-    }
 
-    store.attach(new StoreObserver());
+        observers.push(new StoreObserver());
 
-    if (typeof observers !== "undefined") {
-        for (const observer of observers) {
-            store.attach(observer);
+        if (override) {
+            const store = new Store(state);
+
+            for (const observer of observers) {
+                store.attach(observer);
+            }
+
+            Stores.addStoreAtPointer(store, pointer, true, false);
+        } else {
+            Stores.upsert(state, pointer, ...observers);
         }
-    }
 
-    StoreStack.configure();
-
-    if (typeof pointer === "string") {
-        window.stores.addStoreAtPointer(store, pointer, false, false);
         return pointer;
     } else {
-        return window.stores.addStore(store);
+        return Stores.addStore(new Store(state));
     }
-
 }
 
 // deno-lint-ignore no-explicit-any
 export type AnyStore = Store<any>;
 
 interface _StoreStack {
-    [key: string]: AnyStore;
+    [key: Pointer]: AnyStore;
 }
 
 export class StoreStack {
@@ -122,14 +174,14 @@ export class StoreStack {
 
     private stores: _StoreStack = {};
 
-    public addStore(newItem: AnyStore): string {
+    public addStore(newItem: AnyStore): Pointer {
         const ptr = crypto.randomUUID();
 
         this.stores[ptr] = newItem;
         return ptr;
     }
 
-    public addStoreAtPointer(newItem: AnyStore, pointer: string, override?: boolean, verbose?: boolean): void {
+    public addStoreAtPointer(newItem: AnyStore, pointer: Pointer, override?: boolean, verbose?: boolean): void {
         if (typeof this.stores[pointer] !== "undefined" && !override) {
             if (verbose) {
                 return console.warn('Error: Cannot add store at pointer, address is already allocated.');
@@ -141,7 +193,7 @@ export class StoreStack {
         this.stores[pointer] = newItem;
     }
 
-    public upsert<T>(defaultValue: T, pointer: string, ...observers: Observer<T>[]): void {
+    public upsert<T>(defaultValue: T, pointer: Pointer, ...observers: Observer<T>[]): void {
         if (typeof this.stores[pointer] === "undefined") {
             this.stores[pointer] = new Store(defaultValue);
         }
@@ -151,7 +203,7 @@ export class StoreStack {
         }
     }
 
-    public removeStore(ptr: string): void {
+    public removeStore(ptr: Pointer): void {
         if (typeof this.stores[ptr] === "undefined") {
             return console.error('Error: The pointer address points to unallocated memory.');
         }
@@ -160,7 +212,7 @@ export class StoreStack {
     }
 
     // deno-lint-ignore no-explicit-any
-    public get<T = any>(ptr: string): Store<T> | undefined {
+    public get<T = any>(ptr: Pointer): Store<T> | undefined {
         if (typeof this.stores[ptr] !== "undefined") {
             return this.stores[ptr] as Store<T>;
         }
@@ -168,3 +220,8 @@ export class StoreStack {
         return undefined;
     }
 }
+
+export const Stores = (function () {
+    StoreStack.configure();
+    return window.stores;
+})();
