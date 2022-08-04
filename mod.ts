@@ -142,11 +142,9 @@ export interface StoreOptions<T> {
     /**
      * If set to true, will override the store at the pointer's address if it exists.
      * 
-     * @remark
-     * Has no effect if the address is unallocated.
+     * *Has no effect if the address is unallocated.*
      * 
-     * @default false
-     * 
+     * @default undefined
      * @optional
      */
     override?: boolean;
@@ -160,7 +158,7 @@ export interface StoreOptions<T> {
  * 
  * **If no pointer is provided, a pointer will be assigned and returned.**
  * 
- * ### Example
+ * ## Example
  * 
  * ```typescript
  * // 1. Creating a store without any options
@@ -205,7 +203,7 @@ export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
                 store.attach(observer);
             }
 
-            Stores.addStoreAtPointer(store, pointer, true, false);
+            Stores.addStoreAtPointer(store, pointer, { override: true });
         } else {
             // If a store exists at address, it will NOT be overrided, but additional observers will be attached to the store.
 
@@ -220,31 +218,65 @@ export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
     }
 }
 
+/**
+ * Convenience type for `Store` of any type.
+ */
 // deno-lint-ignore no-explicit-any
 export type AnyStore = Store<any>;
 
+/**
+ * @internal
+ * Structure for the `Store` memory stack.
+ */
 interface _StoreStack {
     [key: Pointer]: AnyStore;
 }
 
+/**
+ * A multi {@link Store} container.
+ */
 export class StoreStack {
+    /**
+     * Checks if the `StoreStack` is instantiated on `window.stores` and creates it if it's not.
+     */
     static configure(): void {
         if (typeof window.stores === "undefined" || window.stores instanceof StoreStack === false) {
             window.stores = new StoreStack();
         }
     }
 
-    private stores: _StoreStack = {};
+    /**
+     * @internal
+     * Object containing all the stores.
+     */
+    #stores: _StoreStack = {};
 
+    /**
+     * Adds a store to the memory stack and assigns it a pointer.
+     * 
+     * @param newItem The {@link Store} to be added to the stack.
+     * @returns The {@link Pointer} to the allocated memory for the store.
+     */
     public addStore(newItem: AnyStore): Pointer {
         const ptr = crypto.randomUUID();
 
-        this.stores[ptr] = newItem;
+        this.#stores[ptr] = newItem;
         return ptr;
     }
 
-    public addStoreAtPointer(newItem: AnyStore, pointer: Pointer, override?: boolean, verbose?: boolean): void {
-        if (typeof this.stores[pointer] !== "undefined" && !override) {
+    /**
+     * Adds a store to the specified {@link Pointer}. If a store already exists at the address, an option can be passed to override it.
+     * If `override` is set to `false`, but the `verbose` option is set to true, and the memory is already allocated, the store will **NOT**
+     * be overrided, and an error message will output to the console.
+     * 
+     * @param newItem The {@link Store} to be added to the stack.
+     * @param pointer The {@link Pointer} to the memory address where the store should be inserted.
+     * @param options Defines if a store should be overrided if it exists at the `Pointer` and if a verbose error should be returned if override is set to false.
+     */
+    public addStoreAtPointer(newItem: AnyStore, pointer: Pointer, options: { override?: boolean, verbose?: boolean }): void {
+        const { override, verbose } = options;
+
+        if (typeof this.#stores[pointer] !== "undefined" && !override) {
             if (verbose) {
                 return console.warn('Error: Cannot add store at pointer, address is already allocated.');
             } else {
@@ -252,37 +284,72 @@ export class StoreStack {
             }
         }
 
-        this.stores[pointer] = newItem;
+        this.#stores[pointer] = newItem;
     }
 
+    /**
+     * This method makes sure a store if instantiated at the {@link Pointer}'s address.
+     * If no store is instantiated, it will create one holding the `defaultValue` provided.
+     * Otherwise, it will only attach {@link Observer Observers} if they are provided.
+     * 
+     * @param defaultValue A default state value to insert if a new store is created.
+     * @param pointer The {@link Pointer} to the memory address.
+     * @param observers {@link Observer Observers} to attach to the store.
+     */
     public upsert<T>(defaultValue: T, pointer: Pointer, ...observers: Observer<T>[]): void {
-        if (typeof this.stores[pointer] === "undefined") {
-            this.stores[pointer] = new Store(defaultValue);
+        if (typeof this.#stores[pointer] === "undefined") {
+            this.#stores[pointer] = new Store(defaultValue);
         }
 
         for (const observer of observers) {
-            this.stores[pointer].attach(observer);
+            this.#stores[pointer].attach(observer);
         }
     }
 
-    public removeStore(ptr: Pointer): void {
-        if (typeof this.stores[ptr] === "undefined") {
-            return console.error('Error: The pointer address points to unallocated memory.');
+    /**
+     * Removes a store from the memory stack. If the {@link Pointer}'s address is unallocated,
+     * it will output an error message to the `console` if `verbose` option is set to true.
+     * 
+     * @param ptr The {@link Pointer}'s address of the store.
+     * @param options If the removal fails, should the function verbose it to the console? Defaults to false.
+     */
+    public removeStore(ptr: Pointer, options: { verbose?: boolean }): void {
+        if (typeof this.#stores[ptr] === "undefined") {
+            if (options.verbose) {
+                return console.error('Error: The pointer address points to unallocated memory.');
+            } else {
+                return;
+            }
         }
 
-        delete this.stores[ptr];
+        delete this.#stores[ptr];
     }
 
+    /**
+     * Returns a reference to the store at the address. A type can be passed in order to make the return typed.
+     * 
+     * ## Example
+     * ```typescript
+     * const ptr = useStore(0);
+     * console.log(Stores.get<number>(ptr).state); // Output: 0
+     * ```
+     * 
+     * @param ptr The {@link Pointer} to the store.
+     * @returns The store if it exists
+     */
     // deno-lint-ignore no-explicit-any
     public get<T = any>(ptr: Pointer): Store<T> | undefined {
-        if (typeof this.stores[ptr] !== "undefined") {
-            return this.stores[ptr] as Store<T>;
+        if (typeof this.#stores[ptr] !== "undefined") {
+            return this.#stores[ptr] as Store<T>;
         }
 
         return undefined;
     }
 }
 
+/**
+ * Convenience constant, provide access to the global `StoreStack` and creates it if it doesn't exist.
+ */
 export const Stores: StoreStack = (function () {
     StoreStack.configure();
     return window.stores;
