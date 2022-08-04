@@ -1,12 +1,18 @@
 /// <reference path="./global.d.ts" />
 
-import 'https://deno.land/x/corejs@v3.24.1/index.js';
+// Polyfill for browsers that don't support the native `structuredClone`.
+(async () => {
+    if ('structuredClone' in window === false) {
+        await import('https://deno.land/x/corejs@v3.24.1/index.js');
+    }
+})();
 
 export interface Observer<T> {
     update(subject: Store<T>): void;
 }
 
 export interface Subject<T> {
+    readonly state: T;
     attach(observer: Observer<T>): void;
     detach(observer: Observer<T>): void;
     notify(): void;
@@ -14,46 +20,95 @@ export interface Subject<T> {
     set(options: (prevState: T) => T): void;
 }
 
+/**
+ * A simple store that follows the Observer pattern.
+ */
 export class Store<T> implements Subject<T> {
-    private observers: Observer<T>[] = [];
+    /**
+     * @internal
+     * List of all the observers attached to the store.
+     */
+    #observers: Observer<T>[] = [];
 
-    constructor(public state: T) { }
+    /**
+     * @internal
+     * The internal representation of state.
+     */
+    #state: T;
 
+    /**
+     * A deep copy of the internal state, to prevent referenced objects to be directly mutated.
+     * 
+     * @remarks
+     * To mutate the state, use {@link Store.set}.
+     */
+    public get state(): T { return structuredClone(this.#state) as T; }
+
+    /**
+     * Creates a new `Store` (aka {@link Subject}) that can be subscribed to, or observed for a state change.
+     */
+    constructor(state: T) {
+        this.#state = state;
+    }
+
+    /**
+     * Attaches/subscribes a new {@link Observer} to the store.
+     * 
+     * @param observer Subscribes a new {@link Observer} to the store.
+     */
     public attach(observer: Observer<T>): void {
-        const isExist = this.observers.includes(observer);
+        const isExist = this.#observers.includes(observer);
         if (isExist) {
             return console.warn('Subject: Observer has been attached already.');
         }
 
-        this.observers.push(observer);
+        this.#observers.push(observer);
     }
 
+    /**
+     * Detaches/unsubscribes an {@link Observer} from the store.
+     * 
+     * @param observer The `Observer` to remove.
+     */
     public detach(observer: Observer<T>): void {
-        const observerIndex = this.observers.indexOf(observer);
+        const observerIndex = this.#observers.indexOf(observer);
         if (observerIndex === -1) {
             return console.error('Subject: Nonexistent observer.', observer);
         }
 
-        this.observers.splice(observerIndex, 1);
+        this.#observers.splice(observerIndex, 1);
     }
 
+    /**
+     * Notifies all the observers of a change. Will trigger automatically when the state is changed through
+     * {@link Store.set}, but it can be forced by calling this method directly.
+     */
     public notify(): void {
-        for (const observer of this.observers) {
+        for (const observer of this.#observers) {
             observer.update(this);
         }
     }
 
+    /**
+     * Method to mutate the internal state. If a value is directly provided, assign the internal state to that value.
+     * A function can also be provided to access a dereferenced copy of the previous state.
+     * 
+     * @param options A value, or function to access the previous state.
+     */
     public set(options: T | ((prevState: T) => T)): void {
         if (typeof options === "function") {
-            this.state = (options as (prevState: T) => T)(structuredClone(this.state) as T);
+            this.#state = structuredClone((options as (prevState: T) => T)(structuredClone(this.state) as T)) as T;
         } else {
-            this.state = structuredClone(options) as T;
+            this.#state = structuredClone(options) as T;
         }
 
         this.notify();
     }
 }
 
+/**
+ * Convenience type alias for a pointer.
+ */
 export type Pointer = string;
 
 /**
@@ -101,7 +156,9 @@ export interface StoreOptions<T> {
  * Convenience function to create a store. Multiple options can be provided, see {@link StoreOptions}.
  * 
  * Unless the `override` option is set to `true`, this function will not override an existing store, it
- * is therefor safe to use to make sure a store is defined in multiple components.
+ * is therefore safe to use to make sure a store is defined in multiple components.
+ * 
+ * **If no pointer is provided, a pointer will be assigned and returned.**
  * 
  * ### Example
  * 
@@ -118,15 +175,14 @@ export interface StoreOptions<T> {
  * Stores.get<number>(store2Ptr).set((prevState) => prevState + 1); // Ouput: 1
  * ```
  * 
- * @remarks
- * If no pointer is provided, a pointer will be assigned and returned.
- * 
  * @param state The initial state. If the store already exists, it will not overwrite the state unless the `override` option is set to `true`.
  * @param options See {@link StoreOptions}.
  * @returns The {@link Pointer} to the location of the store.
  */
 export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
     if (typeof options === "object") {
+        // Options are provided
+
         const pointer = options.pointer ?? crypto.randomUUID();
         const callback = options.onChange ?? (() => null);
         const observers = options.observers ?? [];
@@ -141,6 +197,8 @@ export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
         observers.push(new StoreObserver());
 
         if (override) {
+            // If a store exists at address, it will be overrided.
+
             const store = new Store(state);
 
             for (const observer of observers) {
@@ -149,11 +207,15 @@ export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
 
             Stores.addStoreAtPointer(store, pointer, true, false);
         } else {
+            // If a store exists at address, it will NOT be overrided, but additional observers will be attached to the store.
+
             Stores.upsert(state, pointer, ...observers);
         }
 
         return pointer;
     } else {
+        // No options are provided
+
         return Stores.addStore(new Store(state));
     }
 }
@@ -221,7 +283,7 @@ export class StoreStack {
     }
 }
 
-export const Stores = (function () {
+export const Stores: StoreStack = (function () {
     StoreStack.configure();
     return window.stores;
 })();
