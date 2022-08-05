@@ -1,4 +1,4 @@
-import { assertEquals, assertInstanceOf, assertNotEquals } from "https://deno.land/std@0.151.0/testing/asserts.ts";
+import { assertEquals, assertInstanceOf } from "https://deno.land/std@0.151.0/testing/asserts.ts";
 import * as mod from "../mod.ts";
 
 // Testing setup
