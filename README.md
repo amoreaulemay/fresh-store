@@ -1,5 +1,7 @@
 # Fresh Store
 
+![Build Passing](https://github.com/amoreaulemay/fresh-store/actions/workflows/deno.yml/badge.svg)
+
 A minimal store for Fresh, to allow communication between islands. It attach stores to the `window` component. It uses "pointers" or "keys" to associate stores. A pointer can either be provided, or auto-generated.
 
 ## Usage
