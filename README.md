@@ -7,33 +7,32 @@ A minimal store for Fresh, to allow communication between islands. It attach sto
 Creating a store.
 
 ```typescript
-const ptr = useStore(
-    "Initial Value", 
-    (newState) => console.log(`New value: ${newState}`),
-);
+const ptr = useStore("Initial Value", { onChange: (state) => console.log(state) });
 
-console.log(window.stores.get<string>(ptr).state);
-window.stores.get<string>(ptr).set("Modified Value");
+console.log(Stores.get<string>(ptr)?.state);
+Stores.get<string>(ptr)?.set("Modified Value");
 ```
 
 ```
 Output:
 Initial Value
-New value: Modified Value
+Modified Value
 ```
 
 Creating a store and providing a pointer.
 
 ```typescript
-const ptr = crypto.randomUUID();
+const pointer = crypto.randomUUID();
 useStore(
-    "Initial Value",
-    (newState) => console.log(`New value: ${newState}`),
-    ptr,
+    "Initial Value", 
+    {
+        pointer: pointer,
+        onChange: (newState) => console.log(`New value: ${newState}`)
+    },
 );
 
-console.log(window.stores.get<string>(ptr).state);
-window.stores.get<string>(ptr).set("Modified Value");
+console.log(Stores.get<string>(ptr)?.state);
+Stores.get<string>(ptr)?.set("Modified Value");
 ```
 
 ```
@@ -45,7 +44,7 @@ New value: Modified Value
 ## Creating a new Observer
 
 ```typescript
-const storePtr = useStore("New Store", (_) => null);
+const storePtr = useStore("New Store");
 
 class ConcreteObserver implements Observer<T> {
     public update(subject: Store<T>): void {
@@ -53,7 +52,7 @@ class ConcreteObserver implements Observer<T> {
     }
 }
 
-window.stores.get(storePtr).attach(new ConcreteObserver());
+Stores.get(storePtr)?.attach(new ConcreteObserver());
 ```
 
 ## Example usage in components
@@ -63,23 +62,24 @@ window.stores.get(storePtr).attach(new ConcreteObserver());
 
 /** @jsx h */
 import { h } from "preact";
+import { Stores, useStore } from "@stores";
 
 interface CompAProps {
     storePtr: string;
 }
 
 export default function ComponentA(props: CompAProps) {
-    useStore<number>(0, () => null, props.storePtr);
+    useStore(0, { pointer: props.storePtr });
 
     const increment = () => 
-        window.stores
+        Stores
             .get<number>(props.storePtr)
-            .set((state) => state + 1);
+            ?.set((state) => state + 1);
     
     const decrement = () =>
-        window.stores
+       Stores
             .get<number>(props.storePtr)
-            .set((state) => state - 1);
+            ?.set((state) => state - 1);
     
     return (
         <div>
@@ -95,11 +95,9 @@ export default function ComponentA(props: CompAProps) {
 
 /** @jsx h */
 import { h } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 
-// Change depending on your import_map
-import type { Observer, Store } from "@store";
-import { StoreStack } from "@store";
+import { useStore } from "@store";
 
 interface CompBProps {
     storePtr: string;
@@ -107,28 +105,10 @@ interface CompBProps {
 
 export default function ComponentB(props: CompBProps) {
     const [counter, setCounter] = useState(0);
-
-    useEffect(() => {
-        class CounterObserver implements Observer<number> {
-            public update(subject: Store<number>) {
-                setCounter(subject.state);
-            }
-        }
-
-        const observer = new CounterObserver();
-
-        // Makes sure `window.stores` is defined.
-        StoreStack.configure();
-
-        // Creates the store if it does not yet exist.
-        window.stores.upsert<number>(counter, props.storePtr, observer);
-
-        // Sets the counter value to the value in the store.
-        setCounter(window.stores.get<number>(props.storePtr)!.state);
-
-        // Detaches the observer on cleanup.
-        return () => window.stores.get(props.storePtr).detach(observer);
-    }, [counter]);
+    useStore(counter, {
+        pointer: props.storePtr,
+        onChange: (newState) => setCounter(newState),
+    });
 
     return <p>Counter: {counter}</p>;
 }
