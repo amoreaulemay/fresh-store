@@ -377,11 +377,9 @@ export class StoreStack {
      * 
      * @throws {MemoryAllocationError} If the address is already allocated and `override` isn't set to `true`.
      */
-    public addStoreAtPointer(newItem: AnyStore, pointer: Pointer, options: { override?: boolean, verbose?: boolean }): void {
-        const { override, verbose } = options;
-
-        if (typeof this.#stores[pointer] !== "undefined" && !override) {
-            if (verbose) {
+    public addStoreAtPointer(newItem: AnyStore, pointer: Pointer, options?: { override?: boolean, verbose?: boolean }): void {
+        if (typeof this.#stores[pointer] !== "undefined" && !options?.override) {
+            if (options?.verbose) {
                 console.error('Error: Cannot add store at pointer, address is already allocated.');
             }
 
@@ -425,9 +423,9 @@ export class StoreStack {
      * 
      * @throws {NullPointerError} If attempting to delete a store at unallocated memory address.
      */
-    public removeStore(ptr: Pointer, options: { verbose?: boolean }): void {
+    public removeStore(ptr: Pointer, options?: { verbose?: boolean }): void {
         if (typeof this.#stores[ptr] === "undefined") {
-            if (options.verbose) {
+            if (options?.verbose) {
                 console.error('Error: The pointer address points to unallocated memory.');
             }
 

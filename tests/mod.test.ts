@@ -1,4 +1,4 @@
-import { assertEquals, assertInstanceOf, assertNotEquals, assertThrows } from "https://deno.land/std@0.151.0/testing/asserts.ts";
+import { assertEquals, assertExists, assertInstanceOf, assertNotEquals, assertThrows } from "https://deno.land/std@0.151.0/testing/asserts.ts";
 import * as mod from "../mod.ts";
 
 // Mark: Test Custom Errors
@@ -152,4 +152,80 @@ Deno.test("An unattached observer cannot be removed", () => {
     const observer = new ConcreteObserver();
 
     assertThrows(() => store.detach(observer), mod.UnknownObserverError, "Attempted removal of unattached observer.", "Should throw on removal of unattached observer.")
+});
+
+// Mark: StoreStack tests
+Deno.test("An instance of StoreStack can be instantiated", () => {
+    const stack = new mod.StoreStack() as unknown;
+
+    assertInstanceOf(stack, mod.StoreStack);
+});
+
+Deno.test("A store can be added to a stack without providing a pointer, accessed with the returned pointer and can be removed", () => {
+    const stack = new mod.StoreStack();
+
+    const store = new mod.Store(0);
+    const ptr = stack.addStore(store);
+
+    const store2 = new mod.Store(1);
+
+    assertExists(ptr, "ptr should not be undefined.");
+    assertExists(stack.get<number>(ptr), "The pointer should be allocated");
+    assertEquals(stack.get<number>(ptr)!.state, store.state, "The states should match");
+
+    // Cannot be added twice at address without override
+    assertThrows(() => stack.addStoreAtPointer(store, ptr), mod.MemoryAllocationError, "Attempted to insert store at already allocated memory address without explicit override.", "Should not be able to add at address without override.");
+
+    // Can be overriden
+    stack.addStoreAtPointer(store2, ptr, { override: true });
+
+    assertExists(stack.get<number>(ptr), "The pointer should be allocated");
+    assertEquals(stack.get<number>(ptr)!.state, store2.state, "The states should match");
+
+    stack.removeStore(ptr);
+
+    assertEquals(typeof stack.get(ptr), "undefined", "The pointer should be unallocated");
+
+    // But cannot be removed twice
+    assertThrows(() => stack.removeStore(ptr), mod.NullPointerError, "Attempted to access unallocated memory address.", "Should not be able to delete the store twice.");
+});
+
+Deno.test("upsert test", () => {
+    const stack = new mod.StoreStack();
+
+    const pointer1 = crypto.randomUUID();
+
+    const defaultValue1 = 0;
+    const defaultValue2 = 1;
+
+    class ConcreteObserver implements mod.Observer<number> {
+        public update(subject: mod.Store<number>): void {
+            observerOuput = subject.state;
+        }
+    }
+
+    const observer = new ConcreteObserver();
+    let observerOuput = defaultValue1;
+
+    // Pre assertions
+    assertEquals(typeof stack.get(pointer1), "undefined", "Pointer should not already be allocated");
+
+    // Creating a store
+    stack.upsert(defaultValue1, pointer1);
+
+    assertExists(stack.get(pointer1), "Store should now exist");
+    assertEquals(stack.get(pointer1)!.state, defaultValue1, "State should equal " + defaultValue1);
+
+    stack.upsert(defaultValue2, pointer1);
+
+    assertNotEquals(stack.get(pointer1)!.state, defaultValue2, "Because the store already exists, it should not override its value");
+
+    // Attaching an observer
+    stack.upsert(defaultValue1, pointer1, observer);
+    stack.get<number>(pointer1)!.set(defaultValue2);
+
+    assertEquals(observerOuput, defaultValue2, "observerOutput and defaultValue2 should match");
+
+    // Throwing on reattaching observer
+    assertThrows(() => stack.upsert(defaultValue1, pointer1, observer), mod.DuplicateObserverError, "This observer is already attached to the store.", "Should trigger a duplicate observer error");
 });
