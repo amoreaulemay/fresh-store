@@ -1,5 +1,6 @@
 /// <reference path="./global.d.ts" />
 
+// Mark: Polyfill
 // Polyfill for browsers that don't support the native `structuredClone`.
 (async () => {
     if ('structuredClone' in window === false) {
@@ -7,6 +8,7 @@
     }
 })();
 
+// Mark: Definition Interfaces
 export interface Observer<T> {
     update(subject: Store<T>): void;
 }
@@ -20,6 +22,65 @@ export interface Subject<T> {
     set(options: (prevState: T) => T): void;
 }
 
+// Mark: Custom Types
+/**
+ * Convenience type alias for a pointer.
+ */
+export type Pointer = string;
+
+/**
+ * Convenience type for `Store` of any type.
+ */
+// deno-lint-ignore no-explicit-any
+export type AnyStore = Store<any>;
+
+// Mark: Custom Errors
+/**
+ * Error that is triggered when a duplicated observer is being attached to a store.
+ * 
+ * @final
+ */
+export class DuplicateObserverError extends Error {
+    constructor() {
+        super("This observer is already attached to the store.");
+    }
+}
+
+/**
+ * Error that is triggered when a non-existing/non-attached observer is being detached from a store.
+ * 
+ * @final
+ */
+export class UnknownObserverError extends Error {
+    constructor() {
+        super("Attempted removal of unattached observer.");
+    }
+}
+
+/**
+ * Error that is triggered when attempting to insert a store at an address that was already allocated,
+ * without explicit override.
+ * 
+ * @final
+ */
+export class MemoryAllocationError extends Error {
+    constructor() {
+        super("Attempted to insert store at already allocated memory address without explicit override.");
+    }
+}
+
+/**
+ * Error that is triggered when attempting to access a memory address that is unallocated.
+ * 
+ * @final
+ */
+export class NullPointerError extends Error {
+    constructor() {
+        super("Attempted to access unallocated memory address.");
+    }
+}
+
+// Mark: Store
 /**
  * A simple store that follows the Observer pattern.
  */
@@ -55,11 +116,12 @@ export class Store<T> implements Subject<T> {
      * Attaches/subscribes a new {@link Observer} to the store.
      * 
      * @param observer Subscribes a new {@link Observer} to the store.
+     * @throws {DuplicateObserverError} If the observer has already been attached.
      */
     public attach(observer: Observer<T>): void {
         const isExist = this.#observers.includes(observer);
         if (isExist) {
-            return console.warn('Subject: Observer has been attached already.');
+            throw new DuplicateObserverError();
         }
 
         this.#observers.push(observer);
@@ -69,11 +131,12 @@ export class Store<T> implements Subject<T> {
      * Detaches/unsubscribes an {@link Observer} from the store.
      * 
      * @param observer The `Observer` to remove.
+     * @throws {UnknownObserverError} If the observer was non-existent in the store.
      */
     public detach(observer: Observer<T>): void {
         const observerIndex = this.#observers.indexOf(observer);
         if (observerIndex === -1) {
-            return console.error('Subject: Nonexistent observer.', observer);
+            throw new UnknownObserverError();
         }
 
         this.#observers.splice(observerIndex, 1);
@@ -106,10 +169,7 @@ export class Store<T> implements Subject<T> {
     }
 }
 
-/**
- * Convenience type alias for a pointer.
- */
-export type Pointer = string;
+// Mark: useStore Options
 
 /**
  * The options to create a store.
@@ -148,8 +208,33 @@ export interface StoreOptions<T> {
      * @optional
      */
     override?: boolean;
+
+    /**
+     * See {@link StoreOptionsErrorHandling}
+     */
+    errorHandling?: StoreOptionsErrorHandling;
 }
 
+/**
+ * Defines how {@link useStore} should handle errors.
+ */
+export interface StoreOptionsErrorHandling {
+    /**
+     * Set to `true` if error messages should be outputed to the console.
+     * 
+     * `verbose` is set to `false` by default.
+     */
+    verbose?: boolean;
+
+    /**
+     * By default {@link useStore} will silently ignore errors to allow the program to
+     * continue its execution. If `stopOnError` is set to `true`, the function will stop
+     * if an error is thrown and will rethrow it.
+     */
+    stopOnError?: boolean;
+}
+
+// Mark: useStore
 /**
  * Convenience function to create a store. Multiple options can be provided, see {@link StoreOptions}.
  * 
@@ -172,6 +257,8 @@ export interface StoreOptions<T> {
  * console.log(Stores.get<number>(store2Ptr).state); // Ouput: 0
  * Stores.get<number>(store2Ptr).set((prevState) => prevState + 1); // Ouput: 1
  * ```
+ * 
+ * @throws {DuplicateObserverError} If provided observer(s) is/are already attached to the store or duplicates.
  * 
  * @param state The initial state. If the store already exists, it will not overwrite the state unless the `override` option is set to `true`.
  * @param options See {@link StoreOptions}.
@@ -200,14 +287,34 @@ export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
             const store = new Store(state);
 
             for (const observer of observers) {
-                store.attach(observer);
+                try {
+                    store.attach(observer);
+                } catch (error) {
+                    if (options.errorHandling?.verbose === true) {
+                        console.error(error);
+                    }
+
+                    if (options.errorHandling?.stopOnError === true) {
+                        throw error;
+                    }
+                }
             }
 
             Stores.addStoreAtPointer(store, pointer, { override: true });
         } else {
             // If a store exists at address, it will NOT be overrided, but additional observers will be attached to the store.
 
-            Stores.upsert(state, pointer, ...observers);
+            try {
+                Stores.upsert(state, pointer, ...observers);
+            } catch (error) {
+                if (options.errorHandling?.verbose === true) {
+                    console.error(error);
+                }
+
+                if (options.errorHandling?.stopOnError === true) {
+                    throw error;
+                }
+            }
         }
 
         return pointer;
@@ -218,12 +325,7 @@ export function useStore<T>(state: T, options?: StoreOptions<T>): Pointer {
     }
 }
 
-/**
- * Convenience type for `Store` of any type.
- */
-// deno-lint-ignore no-explicit-any
-export type AnyStore = Store<any>;
-
+// Mark: StoreStack
 /**
  * @internal
  * Structure for the `Store` memory stack.
@@ -272,16 +374,18 @@ export class StoreStack {
      * @param newItem The {@link Store} to be added to the stack.
      * @param pointer The {@link Pointer} to the memory address where the store should be inserted.
      * @param options Defines if a store should be overrided if it exists at the `Pointer` and if a verbose error should be returned if override is set to false.
+     * 
+     * @throws {MemoryAllocationError} If the address is already allocated and `override` isn't set to `true`.
      */
     public addStoreAtPointer(newItem: AnyStore, pointer: Pointer, options: { override?: boolean, verbose?: boolean }): void {
         const { override, verbose } = options;
 
         if (typeof this.#stores[pointer] !== "undefined" && !override) {
             if (verbose) {
-                return console.warn('Error: Cannot add store at pointer, address is already allocated.');
-            } else {
-                return;
+                console.error('Error: Cannot add store at pointer, address is already allocated.');
             }
+
+            throw new MemoryAllocationError();
         }
 
         this.#stores[pointer] = newItem;
@@ -291,6 +395,8 @@ export class StoreStack {
      * This method makes sure a store if instantiated at the {@link Pointer}'s address.
      * If no store is instantiated, it will create one holding the `defaultValue` provided.
      * Otherwise, it will only attach {@link Observer Observers} if they are provided.
+     * 
+     * @throws {DuplicateObserverError} If observer is duplicate.
      * 
      * @param defaultValue A default state value to insert if a new store is created.
      * @param pointer The {@link Pointer} to the memory address.
@@ -302,7 +408,11 @@ export class StoreStack {
         }
 
         for (const observer of observers) {
-            this.#stores[pointer].attach(observer);
+            try {
+                this.#stores[pointer].attach(observer);
+            } catch (error) {
+                throw error;
+            }
         }
     }
 
@@ -312,21 +422,24 @@ export class StoreStack {
      * 
      * @param ptr The {@link Pointer}'s address of the store.
      * @param options If the removal fails, should the function verbose it to the console? Defaults to false.
+     * 
+     * @throws {NullPointerError} If attempting to delete a store at unallocated memory address.
      */
     public removeStore(ptr: Pointer, options: { verbose?: boolean }): void {
         if (typeof this.#stores[ptr] === "undefined") {
             if (options.verbose) {
-                return console.error('Error: The pointer address points to unallocated memory.');
-            } else {
-                return;
+                console.error('Error: The pointer address points to unallocated memory.');
             }
+
+            throw new NullPointerError();
         }
 
         delete this.#stores[ptr];
     }
 
     /**
-     * Returns a reference to the store at the address. A type can be passed in order to make the return typed.
+     * Returns a reference to the store at the address if it exists, otherwise undefined. A type can be 
+     * passed in order to make the return typed.
      * 
      * ## Example
      * ```typescript
@@ -347,6 +460,7 @@ export class StoreStack {
     }
 }
 
+// Mark: Stores
 /**
  * Convenience constant, provide access to the global `StoreStack` and creates it if it doesn't exist.
  */

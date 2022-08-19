@@ -4,3 +4,7 @@ coverage/
 cov/
 lcov/
 cov_profile/
+cov_profile.lcov
+
+.cov_profile/
+.cov_profile.lcov
