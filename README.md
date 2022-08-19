@@ -1,6 +1,6 @@
 # Fresh Store
 
-![Build Passing](https://github.com/amoreaulemay/fresh-store/actions/workflows/deno.yml/badge.svg) [![](https://img.shields.io/codecov/c/gh/amoreaulemay/fresh-store?style=flat-square)](https://codecov.io/gh/amoreaulemay/fresh-store)
+![Build Passing](https://github.com/amoreaulemay/fresh-store/actions/workflows/deno.yml/badge.svg) [![](https://img.shields.io/codecov/c/gh/amoreaulemay/fresh-store?style=flat-square)](https://codecov.io/gh/amoreaulemay/fresh-store) ![CodeQL](https://github.com/amoreaulemay/fresh-store/workflows/CodeQL/badge.svg)
 
 A minimal store for Fresh, to allow communication between islands. It attach stores to the `window` component. It uses "pointers" or "keys" to associate stores. A pointer can either be provided, or auto-generated.
 
