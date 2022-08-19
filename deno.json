@@ -1,5 +1,5 @@
 {
     "tasks": {
-        "test": "rm -r .cov_profile && rm .cov_profile.lcov && rm -r cov && deno test --coverage=.cov_profile && deno coverage .cov_profile --lcov --output=.cov_profile.lcov && genhtml -o cov/html .cov_profile.lcov && open cov/html/index.html"
+        "test": "rm -rf .cov_profile && rm -f .cov_profile.lcov && rm -rf cov && deno test --coverage=.cov_profile && deno coverage .cov_profile --lcov --output=.cov_profile.lcov && genhtml -o cov/html .cov_profile.lcov && open cov/html/index.html"
     }
 }

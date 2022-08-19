@@ -174,7 +174,7 @@ Deno.test("A store can be added to a stack without providing a pointer, accessed
     assertEquals(stack.get<number>(ptr)!.state, store.state, "The states should match");
 
     // Cannot be added twice at address without override
-    assertThrows(() => stack.addStoreAtPointer(store, ptr), mod.MemoryAllocationError, "Attempted to insert store at already allocated memory address without explicit override.", "Should not be able to add at address without override.");
+    assertThrows(() => stack.addStoreAtPointer(store, ptr, { verbose: true }), mod.MemoryAllocationError, "Attempted to insert store at already allocated memory address without explicit override.", "Should not be able to add at address without override.");
 
     // Can be overriden
     stack.addStoreAtPointer(store2, ptr, { override: true });
@@ -187,7 +187,7 @@ Deno.test("A store can be added to a stack without providing a pointer, accessed
     assertEquals(typeof stack.get(ptr), "undefined", "The pointer should be unallocated");
 
     // But cannot be removed twice
-    assertThrows(() => stack.removeStore(ptr), mod.NullPointerError, "Attempted to access unallocated memory address.", "Should not be able to delete the store twice.");
+    assertThrows(() => stack.removeStore(ptr, { verbose: true }), mod.NullPointerError, "Attempted to access unallocated memory address.", "Should not be able to delete the store twice.");
 });
 
 Deno.test("upsert test", () => {
@@ -228,4 +228,92 @@ Deno.test("upsert test", () => {
 
     // Throwing on reattaching observer
     assertThrows(() => stack.upsert(defaultValue1, pointer1, observer), mod.DuplicateObserverError, "This observer is already attached to the store.", "Should trigger a duplicate observer error");
+});
+
+// Mark: useStore tests
+Deno.test("useStore without options", () => {
+    const stateValue = "Test";
+    const pointer = mod.useStore(stateValue);
+
+    assertExists(mod.Stores.get(pointer), "Store should exist at returned address.");
+    assertEquals(mod.Stores.get<string>(pointer)!.state, stateValue, "The store should contain the initial provided value");
+});
+
+Deno.test("useStore with callback", () => {
+    const startValue = 0;
+    const finalValue = 1;
+
+    let observerOutput = startValue;
+    const observerCb = (state: number) => observerOutput = state;
+
+    const pointer = mod.useStore(startValue, { onChange: observerCb });
+
+    mod.Stores.get<number>(pointer)!.set(finalValue);
+
+    assertEquals(observerOutput, finalValue, "observerOutput should match finalValue");
+});
+
+Deno.test("useStore with pointer", () => {
+    const pointer = crypto.randomUUID();
+    const value = 0;
+
+    assertEquals(mod.useStore(value, { pointer: pointer }), pointer, "Returned pointer should match provided pointer");
+    assertEquals(mod.useStore(value, { pointer: pointer }), pointer, "Should not trigger an error blocking false");
+
+    // with override
+    const value2 = 1;
+
+    mod.useStore(value2, { pointer: pointer, override: true });
+
+    assertEquals(mod.Stores.get<number>(pointer)!.state, value2, "Should match value2");
+
+    // Add cb
+    const finalValue = 2;
+    let outputValue = mod.Stores.get<number>(pointer)!.state;
+    const callback = (state: number) => outputValue = state;
+
+    mod.useStore(finalValue, { pointer: pointer, onChange: callback });
+
+    assertEquals(outputValue, value2, "Should equal value 2 before any changes");
+
+    mod.Stores.get<number>(pointer)!.set(finalValue);
+
+    assertEquals(outputValue, finalValue, "Should equal final value.");
+
+    // Testing duplicate observers
+    class ConcreteObserver implements mod.Observer<number> {
+        public update(_subject: mod.Store<number>): void {
+            return;
+        }
+    }
+
+    const observer = new ConcreteObserver();
+
+    assertThrows(
+        () => {
+            mod.useStore(finalValue, {
+                pointer: pointer,
+                override: true,
+                errorHandling: { verbose: true, stopOnError: true },
+                observers: [observer, observer] // Duplicate observers
+            });
+        },
+        mod.DuplicateObserverError
+    );
+
+    assertThrows(
+        () => {
+            mod.useStore(finalValue, {
+                pointer: pointer,
+                override: false,
+                errorHandling: { verbose: true, stopOnError: true },
+                observers: [observer, observer] // Duplicate observers
+            });
+        },
+        mod.DuplicateObserverError
+    );
+});
+
+Deno.test("misc tests", () => {
+    mod.StoreStack.configure();
 });
