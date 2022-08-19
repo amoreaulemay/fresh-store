@@ -22,30 +22,30 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            # - name: Setup repo
-            #   uses: actions/checkout@v3
+            - name: Setup repo
+              uses: actions/checkout@v3
 
-            # - name: Setup Deno
-            #   # uses: denoland/setup-deno@v1
-            #   uses: denoland/setup-deno@004814556e37c54a2f6e31384c9e18e983317366
-            #   with:
-            #     deno-version: v1.x
+            - name: Setup Deno
+              # uses: denoland/setup-deno@v1
+              uses: denoland/setup-deno@004814556e37c54a2f6e31384c9e18e983317366
+              with:
+                  deno-version: v1.x
 
             # # Uncomment this step to verify the use of 'deno fmt' on each commit.
             # # - name: Verify formatting
             # #   run: deno fmt --check
 
-            # - name: Run linter
-            #   run: deno lint
+            - name: Run linter
+              run: deno lint
 
             # - name: Run tests
             #   run: deno test -A --unstable
-            - uses: actions/checkout@v2
-            - uses: denolib/setup-deno@v2
-              with:
-                  deno-version: v1.8
+            # - uses: actions/checkout@v2
+            # - uses: denolib/setup-deno@v2
+            #   with:
+            #       deno-version: v1.8
             - name: Create coverage files
-              run: deno test --unstable --coverage=coverage # create coverage files
+              run: deno test -A --unstable --coverage=coverage # create coverage files
             - name: Create coverage report
               run: deno --unstable coverage ./coverage --lcov > coverage.lcov # create coverage report
             - name: Collect coverage
