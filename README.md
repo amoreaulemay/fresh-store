@@ -24,7 +24,7 @@ Modified Value
 Creating a store and providing a pointer.
 
 ```typescript
-const pointer = crypto.randomUUID();
+const pointer = Store.newPointer();
 useStore(
     "Initial Value", 
     {
