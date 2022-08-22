@@ -64,10 +64,10 @@ Stores.get(storePtr)?.attach(new ConcreteObserver());
 
 /** @jsx h */
 import { h } from "preact";
-import { Stores, useStore } from "@stores";
+import { Stores, useStore, type Pointer } from "@store";
 
 interface CompAProps {
-    storePtr: string;
+    storePtr: Pointer;
 }
 
 export default function ComponentA(props: CompAProps) {
@@ -99,10 +99,10 @@ export default function ComponentA(props: CompAProps) {
 import { h } from "preact";
 import { useState } from "preact/hooks";
 
-import { useStore } from "@store";
+import { useStore, type Pointer } from "@store";
 
 interface CompBProps {
-    storePtr: string;
+    storePtr: Pointer;
 }
 
 export default function ComponentB(props: CompBProps) {
@@ -122,11 +122,13 @@ export default function ComponentB(props: CompBProps) {
 /** @jsx h */
 import { h } from "preact";
 
+import { Store } from "@store";
+
 import ComponentA from "@islands/componentA.tsx";
 import ComponentB from "@islands/componentB.tsx";
 
 export default function Index() {
-    const storePtr = crypto.randomUUID();
+    const storePtr = Store.newPointer();
 
     return (
         <div>
