@@ -50,6 +50,12 @@ Deno.test("A new Store can be created", () => {
     assertEquals(store.state, state, `store.state should be equal to "${state}"`);
 });
 
+Deno.test("A store can generate a pointer", () => {
+    const pointer = mod.Store.newPointer();
+
+    assertEquals(typeof pointer, "string", "pointer should be a string");
+});
+
 Deno.test("A new observer can be created", () => {
     class ConcreteObserver implements mod.Observer<void> {
         public update(_subject: mod.Store<void>): void {

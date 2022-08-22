@@ -106,6 +106,15 @@ export class Store<T> implements Subject<T> {
     public get state(): T { return structuredClone(this.#state) as T; }
 
     /**
+     * Convenience method to create a unique pointer.
+     * 
+     * @returns A `Pointer`
+     */
+    static newPointer(): string {
+        return crypto.randomUUID();
+    }
+
+    /**
      * Creates a new `Store` (aka {@link Subject}) that can be subscribed to, or observed for a state change.
      */
     constructor(state: T) {
